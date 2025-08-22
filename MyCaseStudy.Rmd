@@ -1,0 +1,215 @@
+---
+title: "Cyclistic bike-share case study"
+author: "Amith"
+date: "2025-08-22"
+output:
+  html_document: default
+  pdf_document: default
+---
+# 1. Business Task
+
+Cyclistic's marketing team has identified a key buiness opportunity: converting casual riders into annual members.
+Annual members generate more consistent revenue and are more porfitable than casual riders
+
+**Business Task:**  
+Analyze historical Cyclistic trip data to determine **how annual members and casual riders use Cyclistic bikes differently**.  
+The insights will guide the marketing strategy to encourage casual riders to purchase annual memberships
+
+**Key Stakeholders:**  
+- **Lily Moreno (Director of Marketing):** Oversees marketing initiatives and campaigns.  
+- **Cyclistic Marketing Analytics Team:** Responsible for analyzing rider behavior and providing insights.  
+- **Cyclistic Executive Team:** Will review findings and approve the final marketing strategy.
+
+
+# 2. Data Sources
+
+For this case study, the analysis uses **Cyclistic’s historical trip data**, which is made publicly available by the Divvy bike-share system in Chicago.  
+
+- **Source:** [Divvy Trip Data Archive](https://divvy-tripdata.s3.amazonaws.com/index.html)  
+- **Provider:** Motivate International Inc., which operates the Divvy program.  
+- **License:** Public data license agreement. No personally identifiable information (PII) is included.  
+
+**Datasets Used:**  
+Because this project is being run on **RStudio Cloud (Posit free account)** with memory limitations, the analysis focuses on two quarters of data:  
+- `Divvy_Trips_2019_Q1.csv` (January–March 2019)  
+- `Divvy_Trips_2020_Q1.csv` (January–March 2020)  
+
+
+# 3. Data Cleaning and Preparation (Process)
+
+**Tools chosen:**  
+The data was processed using **RStudio Cloud** with the `tidyverse` package for data manipulation and `lubridate` for working with dates. R was chosen because it can efficiently handle large datasets and supports reproducible workflows.
+
+**Steps taken to ensure data integrity:**  
+1. Imported Q1 2019 and Q1 2020 datasets.  
+2. Standardized column names to ensure both datasets aligned.  
+3. Combined datasets into a single dataframe.  
+4. Created new variables:  
+   - `ride_length` (minutes) = `ended_at - started_at`  
+   - `day_of_week` = day name of trip start.  
+5. Removed erroneous data:  
+   - Trips with negative or zero ride length.  
+   - Rows with missing values in critical fields.
+
+```{r}
+install.packages("tidyverse")
+install.packages("lubridate")
+library(tidyverse)
+library(lubridate)
+
+# Import datasets
+
+q1_2019 <- read_csv("data/Divvy_Trips_2019_Q1.csv")
+q1_2020 <- read_csv("data/Divvy_Trips_2020_Q1.csv")
+
+
+# Rename columns in 2019 to match 2020
+
+q1_2019 <- q1_2019 %>%
+  rename(ride_id = trip_id,
+         started_at = start_time,
+         ended_at = end_time,
+         member_casual = usertype)
+
+# Fix ride_id type before combining
+
+q1_2019 <- q1_2019 %>%
+  mutate(ride_id = as.character(ride_id))
+
+q1_2020 <- q1_2020 %>%
+  mutate(ride_id = as.character(ride_id))
+
+print(q1_2020)
+
+# Combine datasets
+
+trips <- bind_rows(q1_2019, q1_2020)
+
+print(trips)
+
+
+# Add ride_length & day_of_week
+
+trips <- trips %>%
+  mutate(ride_length = as.numeric(difftime(ended_at, started_at, units = "mins")),
+         day_of_week = wday(started_at, label = TRUE))
+
+
+# Remove bad data
+
+trips_clean <- trips %>%
+  filter(ride_length > 0 & !is.na(ride_length))
+
+# Preview cleaned dataset
+
+glimpse(trips_clean)
+
+
+# 4. Analysis
+
+##Average Ride Length   
+  
+  trips_clean %>%
+  group_by(member_casual) %>%
+  summarise(avg_ride_length = mean(ride_length),
+            median_ride_length = median(ride_length),
+            max_ride_length = max(ride_length))
+
+##Number of Rides by User Type
+  
+  trips_clean %>%
+  group_by(member_casual) %>%
+  summarise(number_of_rides = n())
+
+## Rides by Day of Week
+  
+  trips_clean %>%
+  group_by(member_casual, day_of_week) %>%
+  summarise(number_of_rides = n(),
+            avg_ride_length = mean(ride_length)) %>%
+  arrange(day_of_week)
+
+
+##Seasonal Trend (since you have 2019 Q1 vs 2020 Q1)
+  
+  trips_clean %>%
+  mutate(month = month(started_at, label = TRUE)) %>%
+  group_by(member_casual, month) %>%
+  summarise(number_of_rides = n()) %>%
+  arrange(month)
+
+
+# 5. Share (Visualizations and Key Findings)
+
+##Average Ride Length by Rider Type
+  
+  
+  trips_clean %>%
+  group_by(member_casual) %>%
+  summarise(avg_ride_length = mean(ride_length)) %>%
+  ggplot(aes(x = member_casual, y = avg_ride_length, fill = member_casual)) +
+  geom_col() +
+  labs(title = "Average Ride Length by Rider Type",
+       x = "Rider Type",
+       y = "Average Duration (minutes)") +
+  theme_minimal()
+
+##Number of Rides by Rider Type
+  
+  trips_clean %>%
+  group_by(member_casual) %>%
+  summarise(number_of_rides = n()) %>%
+  ggplot(aes(x = member_casual, y = number_of_rides, fill = member_casual)) +
+  geom_col() +
+  labs(title = "Total Number of Rides by Rider Type",
+       x = "Rider Type",
+       y = "Number of Rides") +
+  theme_minimal()
+
+##Rides by Day of Week
+  
+  trips_clean %>%
+  group_by(day_of_week, member_casual) %>%
+  summarise(number_of_rides = n()) %>%
+  ggplot(aes(x = day_of_week, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  labs(title = "Rides by Day of Week",
+       x = "Day of Week",
+       y = "Number of Rides") +
+  theme_minimal()
+
+##Seasonal Trend (Months in Q1)
+  
+  trips_clean %>%
+  mutate(month = month(started_at, label = TRUE)) %>%
+  group_by(month, member_casual) %>%
+  summarise(number_of_rides = n()) %>%
+  ggplot(aes(x = month, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  labs(title = "Monthly Ridership by User Type",
+       x = "Month",
+       y = "Number of Rides") +
+  theme_minimal()
+  
+ 
+
+```
+ # 6. Act
+  
+## Final Conclusion
+
+- The analysis shows that casual riders and annual members use Cyclistic bikes very differently.
+
+- Casual riders take longer trips and ride more on weekends, suggesting leisure use.
+- Annual members ride more frequently, especially on weekdays, reflecting commuting behavior.
+- To increase profitability, Cyclistic should focus on converting casual riders into members.
+
+## Top 3 Recommendations
+1. **Target Casual Riders with Promotions**  
+   Launch membership campaigns aimed at casual riders, highlighting cost savings for frequent leisure trips.  
+
+2. **Introduce Flexible Memberships**  
+   Offer weekend or seasonal passes to attract casual riders who primarily ride for leisure.  
+
+3. **Promote Commuting Benefits**  
+   Partner with employers to provide subsidized annual memberships, emphasizing convenience and savings for daily travel.  
